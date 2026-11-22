@@ -13,6 +13,12 @@ local tabState = {
     inbox = { sort = "name", ascending = true, filters = {} },
     shared = { sort = "name", ascending = true, filters = {} },
 }
+local openingTabs = {
+    { "last", "Last used tab" },
+    { "sent", "Sent Items" },
+    { "inbox", "Inbox Items" },
+    { "shared", "Shared Inbox" },
+}
 local filterFields = {
     { "name", "Item" },
     { "sender", "From" },
@@ -478,6 +484,7 @@ end
 
 local function selectTab(tab)
     view, page = tab, 1
+    db.lastTab = tab
     for _, field in ipairs(filterFields) do
         local key = field[1]
         local box = window.filterBoxes[key]
@@ -522,6 +529,32 @@ local function buildWindow()
         selectTab("shared")
         if ShowFriends then ShowFriends() end
     end)
+    local menu = CreateFrame("Frame", nil, frame)
+    menu:SetWidth(170)
+    menu:SetHeight(116)
+    menu:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -17, -71)
+    menu:SetFrameLevel(frame:GetFrameLevel() + 12)
+    menu:EnableMouse(true)
+    menu:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 12,
+    })
+    menu:SetBackdropColor(0.06, 0.06, 0.08, 1)
+    menu:Hide()
+    frame:SetScript("OnHide", function() menu:Hide() end)
+    local opener = button(frame, "", 170, 24, 638, -46, function()
+        if menu:IsShown() then menu:Hide() else menu:Show() end
+    end)
+    for index, option in ipairs(openingTabs) do
+        local key, title = option[1], option[2]
+        button(menu, title, 152, 22, 9, -8 - (index - 1) * 26, function()
+            db.openingTab = key
+            opener:SetText("Open on: " .. title)
+            menu:Hide()
+        end)
+        if db.openingTab == key then opener:SetText("Open on: " .. title) end
+    end
     frame.friends = CreateFrame("Frame", nil, frame)
     frame.friends:SetWidth(158)
     frame.friends:SetHeight(303)
@@ -765,8 +798,15 @@ toggleWindow = function()
     if window:IsShown() then
         window:Hide()
     else
+        local tab = db.openingTab == "last" and db.lastTab or db.openingTab
         window:Show()
-        redraw()
+        if view ~= tab then
+            selectTab(tab)
+        else
+            db.lastTab = tab
+            redraw()
+        end
+        if tab == "shared" and ShowFriends then ShowFriends() end
     end
 end
 
@@ -802,6 +842,8 @@ events:SetScript("OnEvent", function()
     if event == "PLAYER_LOGIN" then
         MailItemLogDB = MailItemLogDB or {}
         db = MailItemLogDB
+        if not tabState[db.openingTab] then db.openingTab = "last" end
+        if not tabState[db.lastTab] then db.lastTab = "sent" end
         db.sent = db.sent or {}
         db.inboxes = db.inboxes or {}
         characterName = UnitName("player")

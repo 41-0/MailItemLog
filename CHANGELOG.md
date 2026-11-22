@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.4
+
+- Added a saved opening-tab setting with a choice of any tab or the last used tab.
+
 ## 0.4.3
 
 - Moved the approval prompt inward from the lower-right corner of the screen.

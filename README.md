@@ -13,6 +13,8 @@ The addon targets WoW 1.12 clients (`Interface: 11200`). Compatibility with thir
 
 ## Tabs
 
+Use **Open on** to choose which tab appears each time you open the window. Choose **Last used tab** (the default), **Sent Items**, **Inbox Items**, or **Shared Inbox**. The setting and last used tab are saved across sessions.
+
 | Tab | What it shows |
 | --- | --- |
 | **Sent Items** | Attachments from successful sends recorded since installation, with timestamp, quantity, sender, and recipient. |
@@ -23,7 +25,7 @@ All three tabs display 12 entries per page. Click a column heading to sort, or c
 
 ## Sharing an inbox
 
-1. Both players must be online, have each other on their friends lists, and run Mail Item Log with the same sharing protocol. Versions 0.4.0 through 0.4.3 use the same protocol.
+1. Both players must be online, have each other on their friends lists, and run Mail Item Log with the same sharing protocol. Versions 0.4.0 through 0.4.4 use the same protocol.
 2. In **Shared Inbox**, click a friend and select **Yes** at the **Send Request?** prompt.
 3. Your friend can select **Approve** or **Decline** in a small notification. They can drag that notification to reposition it for future requests.
 4. After approval, the addon sends the friend's last saved attachment list through in-game whispers. If they have no saved inbox, they need to open a mailbox before you request it again.
