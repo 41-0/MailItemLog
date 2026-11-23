@@ -60,12 +60,25 @@ local function prune(now)
     end
 end
 
-local function inboxItem(index)
-    local name, textureOrID, count, qualityOrCount = GetInboxItem(index)
-    if type(textureOrID) == "number" and type(count) ~= "number" then
-        count = qualityOrCount
+local function itemIconName(texture)
+    if type(texture) ~= "string" then return end
+    texture = string.gsub(string.lower(texture), "%.blp$", "")
+    local _, _, name = string.find(texture, "^interface\\icons\\([%w_%-]+)$")
+    return name
+end
+
+local function itemDetails(name, texture, count, quality, itemQuality)
+    if type(texture) == "number" and type(count) == "string" then
+        texture, count, quality = count, quality, itemQuality
     end
-    return name, count
+    if type(quality) ~= "number" or quality < 0 or quality > 8 or quality ~= math.floor(quality) then
+        quality = nil
+    end
+    return name, count, itemIconName(texture), quality
+end
+
+local function inboxItem(index)
+    return itemDetails(GetInboxItem(index))
 end
 
 local function updateInbox()
@@ -73,11 +86,13 @@ local function updateInbox()
     local items = {}
     for index = 1, GetInboxNumItems() do
         local _, _, sender, _, _, _, daysLeft = GetInboxHeaderInfo(index)
-        local name, count = inboxItem(index)
+        local name, count, icon, quality = inboxItem(index)
         if name and type(count) == "number" and count > 0 then
             table.insert(items, {
                 name = name,
                 count = count,
+                icon = icon,
+                quality = quality,
                 sender = sender or "?",
                 expires = daysLeft and daysLeft > 0 and math.floor(now + daysLeft * 86400) or nil,
             })
@@ -160,8 +175,12 @@ local function reply(accepted)
     local now = time()
     for _, item in ipairs(snapshot.items) do
         if not item.expires or item.expires > now then
-            table.insert(records, string.format("%s|%d|%s|%d\n",
-                encode(item.name), item.count, encode(item.sender), math.floor(item.expires or 0)))
+            local line = string.format("%s|%d|%s|%d",
+                encode(item.name), item.count, encode(item.sender), math.floor(item.expires or 0))
+            if request.itemAppearance then
+                line = line .. "|" .. (item.icon or "") .. "|" .. tostring(item.quality or -1)
+            end
+            table.insert(records, line .. "\n")
         end
     end
     local data = table.concat(records)
@@ -238,15 +257,22 @@ local function parseSnapshot(data, sender)
     local records = {}
     local cursor = headerEnd + 1
     while cursor <= string.len(data) do
-        local first, last, name, count, from, expires =
-            string.find(data, "([^|\n]*)|(%d+)|([^|\n]*)|(%d+)\n", cursor)
-        if first ~= cursor then return end
+        local first, last, name, count, from, expires, icon, quality =
+            string.find(data, "([^|\n]*)|(%d+)|([^|\n]*)|(%d+)|([%w_%-]*)|(-?%d+)\n", cursor)
+        if first ~= cursor then
+            first, last, name, count, from, expires =
+                string.find(data, "([^|\n]*)|(%d+)|([^|\n]*)|(%d+)\n", cursor)
+            if first ~= cursor then return end
+        end
+        quality = tonumber(quality)
         expires = tonumber(expires)
         local itemName = decode(name)
         local senderName = decode(from)
         if itemName == "" or string.find(itemName, "[%c|]") or string.find(senderName, "[%c|]") then return end
         table.insert(records, {
             name = itemName, count = tonumber(count), sender = senderName,
+            icon = icon and icon ~= "" and icon or nil,
+            quality = quality and quality >= 0 and quality <= 8 and quality or nil,
             expires = expires > 0 and expires or nil,
         })
         cursor = last + 1
@@ -263,7 +289,7 @@ local function receivePacket(message, author)
         if not incoming and not transfer and isOnlineFriend(author) and
             (not lastPrompt or now >= lastPrompt + 8) then
             lastPrompt = now
-            incoming = { name = author, id = id, deadline = now + 45 }
+            incoming = { name = author, id = id, deadline = now + 45, itemAppearance = payload == "I" }
             showApproval()
         end
         return
@@ -371,7 +397,7 @@ StaticPopupDialogs["MAILITEMLOG_REQUEST"] = {
         shared = nil
         page = 1
         sharedStatus = "Waiting for " .. target .. " to approve..."
-        sendPacket(target, "R", id)
+        sendPacket(target, "R", id, "I")
         redraw()
     end,
 }
@@ -822,6 +848,7 @@ local function buildWindow()
         end)
     end
     frame.rows = {}
+    frame.itemIcons = {}
     for index = 1, PAGE_SIZE do
         local row = frame:CreateTexture(nil, "BACKGROUND")
         row:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -196 - (index - 1) * 23)
@@ -834,6 +861,11 @@ local function buildWindow()
             cells[col]:SetHeight(16)
         end
         frame.rows[index] = cells
+        local icon = frame:CreateTexture(nil, "ARTWORK")
+        icon:SetWidth(16)
+        icon:SetHeight(16)
+        icon:Hide()
+        frame.itemIcons[index] = icon
     end
     frame.previous = button(frame, "Previous", 90, 23, 16, -487, function()
         page = page - 1
@@ -967,8 +999,15 @@ redraw = function()
             for rowIndex, cells in ipairs(window.rows) do
                 local cell = cells[index]
                 cell:ClearAllPoints()
-                cell:SetPoint("TOPLEFT", window, "TOPLEFT", x + 5, -201 - (rowIndex - 1) * 23)
-                cell:SetWidth(column[3] - 10)
+                local inset = 5
+                if column[1] == "name" then
+                    local icon = window.itemIcons[rowIndex]
+                    icon:ClearAllPoints()
+                    icon:SetPoint("TOPLEFT", window, "TOPLEFT", x + 5, -199 - (rowIndex - 1) * 23)
+                    inset = inset + 21
+                end
+                cell:SetPoint("TOPLEFT", window, "TOPLEFT", x + inset, -201 - (rowIndex - 1) * 23)
+                cell:SetWidth(column[3] - inset - 5)
             end
             x = x + column[3]
         else
@@ -977,6 +1016,15 @@ redraw = function()
     end
     for index, cells in ipairs(window.rows) do
         local entry = entries[(page - 1) * PAGE_SIZE + index]
+        local item = entry and entry.item
+        local icon = window.itemIcons[index]
+        if item and item.icon then
+            icon:SetTexture("Interface\\Icons\\" .. item.icon)
+            icon:Show()
+        else
+            icon:Hide()
+        end
+        local color = item and item.quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[item.quality]
         for col, cell in ipairs(cells) do
             local column = columns[col]
             local value
@@ -988,6 +1036,11 @@ redraw = function()
                 if view == "rts" and field == "name" and not value and (entry.item.money or 0) > 0 then
                     value = entry.item.money .. " copper"
                 end
+            end
+            if column and column[1] == "name" and color then
+                cell:SetTextColor(color.r, color.g, color.b)
+            else
+                cell:SetTextColor(1, 1, 1)
             end
             cell:SetText(value and tostring(value) or "")
         end
@@ -1016,13 +1069,15 @@ local function installSendHook()
     local originalSendMail = SendMail
     SendMail = function(recipient, subject, body)
         if mailboxOpen and not pending and recipient and recipient ~= "" and subject and subject ~= "" then
-            local name, _, count = GetSendMailItem()
+            local name, count, icon, quality = itemDetails(GetSendMailItem())
             local hasAttachment = name and type(count) == "number" and count > 0
             local money = isRTSSubject(subject) and GetSendMailMoney() or 0
             if hasAttachment or isRTSSubject(subject) then
                 pending = {
                     name = hasAttachment and name or nil,
                     count = hasAttachment and count or nil,
+                    icon = icon,
+                    quality = quality,
                     sender = characterName,
                     recipient = recipient,
                 }
@@ -1124,12 +1179,14 @@ events:SetScript("OnEvent", function()
                         key = pending.rtsKey, owner = characterKey, sender = characterName,
                         recipient = pending.recipient, subject = pending.rtsSubject,
                         name = pending.name, count = pending.count, money = pending.rtsMoney,
+                        icon = pending.icon, quality = pending.quality,
                         timestamp = pending.timestamp,
                     })
                 end
                 if pending.name and (not pending.rtsKey or db.logRTSInSent) then
                     table.insert(db.sent, {
                         timestamp = pending.timestamp, name = pending.name, count = pending.count,
+                        icon = pending.icon, quality = pending.quality,
                         sender = pending.sender, recipient = pending.recipient,
                     })
                 end

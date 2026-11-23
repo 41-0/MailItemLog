@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.2
+
+- Added item icons and quality-colored names to all four tabs.
+- Added optional item appearance data to inbox sharing, with support for older clients of the addon.
+
 ## 0.6.1
 
 - Added a short RTS usage guide beside the settings.
