@@ -381,6 +381,19 @@ local function pumpSharing()
     end
 end
 
+StaticPopupDialogs["MAILITEMLOG_CLEAR_INBOXES"] = {
+    text = "Clear saved inbox lists for all your characters? Open each character's mailbox to rebuild its list.",
+    button1 = "Clear All",
+    button2 = "Cancel",
+    timeout = 0,
+    hideOnEscape = 1,
+    OnAccept = function()
+        db.inboxes = {}
+        inboxKey, page = nil, 1
+        redraw()
+    end,
+}
+
 StaticPopupDialogs["MAILITEMLOG_REQUEST"] = {
     text = "Send Request?\nRequest the inbox item list from %s.",
     button1 = "Yes",
@@ -790,6 +803,9 @@ local function buildWindow()
         friendOffset = friendOffset + 1
         redraw()
     end)
+    frame.clearInboxes = button(frame, "Clear All", 96, 22, 535, -76, function()
+        StaticPopup_Show("MAILITEMLOG_CLEAR_INBOXES")
+    end)
     frame.chooseInbox = button(frame, "Next character", 119, 22, 639, -76, function()
         local keys = inboxKeys()
         for index, key in ipairs(keys) do
@@ -895,6 +911,12 @@ redraw = function()
     enable(window.inboxTab, view ~= "inbox")
     enable(window.sharedTab, view ~= "shared")
     enable(window.rtsTab, view ~= "rts")
+    if view == "inbox" then
+        window.clearInboxes:Show()
+        enable(window.clearInboxes, next(db.inboxes) ~= nil)
+    else
+        window.clearInboxes:Hide()
+    end
     if view == "rts" then
         window.autoRTS:SetText(db.autoReturnRTS and "Auto-return RTS: On" or "Auto-return RTS: Off")
         window.logRTS:SetText(db.logRTSInSent and "Record in Sent Items: On" or "Record in Sent Items: Off")

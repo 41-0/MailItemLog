@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3
+
+- Added a Clear All button for saved inbox lists.
+
 ## 0.6.2
 
 - Added item icons and quality-colored names to all four tabs.
