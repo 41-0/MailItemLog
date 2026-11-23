@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.0
+
+- Added the RTS tab with sent RTS history and mailbox-observed return status.
+- Moved the auto-return control into the RTS tab and added a separate Sent Items logging toggle.
+
+## 0.5.2
+
+- Added sent-mail matching as a fallback when the client does not identify returned RTS mail.
+- Restored the standard minimap button parent and hit rectangle.
+
+## 0.5.1
+
+- Removed batch sending and moved the automatic RTS return setting to the main window.
+- Accepted RTS subjects with suffixes such as `RTS [1/3]`.
+- Moved Return RTS below the inbox title and adjusted the minimap button hit area.
+
+## 0.5.0
+
+- Added the RTS Mail tab for sending selected bag stacks in a batch.
+- Added optional automatic RTS returns, enabled by default, and a manual Return RTS button on the mailbox inbox.
+
 ## 0.4.4
 
 - Added a saved opening-tab setting with a choice of any tab or the last used tab.

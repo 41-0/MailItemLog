@@ -12,12 +12,14 @@ local tabState = {
     sent = { sort = "timestamp", ascending = false, filters = {} },
     inbox = { sort = "name", ascending = true, filters = {} },
     shared = { sort = "name", ascending = true, filters = {} },
+    rts = { sort = "timestamp", ascending = false, filters = {} },
 }
 local openingTabs = {
     { "last", "Last used tab" },
     { "sent", "Sent Items" },
     { "inbox", "Inbox Items" },
     { "shared", "Shared Inbox" },
+    { "rts", "RTS" },
 }
 local filterFields = {
     { "name", "Item" },
@@ -30,9 +32,7 @@ local requestTarget, requestCounter = nil, 0
 local sharedStatus = ""
 local friendOffset = 0
 
-local function prune(now)
-    local cutoff = now - RETENTION
-    local sent = db.sent
+local function pruneHistory(sent, cutoff)
     local nextIndex = 1
     local count = table.getn(sent)
     for index = 1, count do
@@ -44,6 +44,15 @@ local function prune(now)
     for index = count, nextIndex, -1 do
         sent[index] = nil
     end
+end
+
+local function prune(now)
+    local cutoff = now - RETENTION
+    pruneHistory(db.sent, cutoff)
+    pruneHistory(db.rtsHistory, cutoff)
+    for key, sentAt in pairs(db.sentRTS) do
+        if sentAt <= cutoff then db.sentRTS[key] = nil end
+    end
     for key, snapshot in pairs(db.inboxes) do
         if snapshot.timestamp <= cutoff then
             db.inboxes[key] = nil
@@ -51,15 +60,20 @@ local function prune(now)
     end
 end
 
+local function inboxItem(index)
+    local name, textureOrID, count, qualityOrCount = GetInboxItem(index)
+    if type(textureOrID) == "number" and type(count) ~= "number" then
+        count = qualityOrCount
+    end
+    return name, count
+end
+
 local function updateInbox()
     local now = time()
     local items = {}
     for index = 1, GetInboxNumItems() do
         local _, _, sender, _, _, _, daysLeft = GetInboxHeaderInfo(index)
-        local name, textureOrID, count, qualityOrCount = GetInboxItem(index)
-        if type(textureOrID) == "number" and type(count) ~= "number" then
-            count = qualityOrCount
-        end
+        local name, count = inboxItem(index)
         if name and type(count) == "number" and count > 0 then
             table.insert(items, {
                 name = name,
@@ -431,6 +445,15 @@ local sharedColumns = {
     { "expires", "Expires", 142 },
 }
 
+local rtsColumns = {
+    { "timestamp", "Sent at", 137 },
+    { "subject", "Subject", 155 },
+    { "name", "Item", 211 },
+    { "count", "Qty", 45 },
+    { "recipient", "To", 120 },
+    { "returnedAt", "Status", 121 },
+}
+
 local function inboxKeys()
     local keys = {}
     for key in pairs(db.inboxes) do
@@ -444,7 +467,7 @@ local function stamp(timestamp)
     return timestamp and date("%Y-%m-%d %H:%M", timestamp) or "-"
 end
 
-local columnsByTab = { sent = sentColumns, inbox = inboxColumns, shared = sharedColumns }
+local columnsByTab = { sent = sentColumns, inbox = inboxColumns, shared = sharedColumns, rts = rtsColumns }
 
 local function visibleItems(items, inboxRecipient, now)
     local state = tabState[view]
@@ -463,6 +486,7 @@ local function visibleItems(items, inboxRecipient, now)
         end
         if matches then
             local value = state.sort == "recipient" and recipient or item[state.sort]
+            if state.sort == "returnedAt" then value = value or 0 end
             if type(value) == "string" then value = string.lower(value) end
             table.insert(entries, { item = item, recipient = recipient, index = index, value = value })
         end
@@ -471,7 +495,7 @@ local function visibleItems(items, inboxRecipient, now)
     table.sort(entries, function(left, right)
         local a, b = left.value, right.value
         if a == b then
-            if view == "sent" then return left.index > right.index end
+            if view == "sent" or view == "rts" then return left.index > right.index end
             return left.index < right.index
         end
         if a == nil then return false end
@@ -482,6 +506,136 @@ local function visibleItems(items, inboxRecipient, now)
     return entries
 end
 
+local rts = {}
+
+local function isRTSSubject(subject)
+    return subject and string.sub(subject, 1, 3) == "RTS"
+end
+
+local function rtsMailKey(otherPlayer, subject, itemName, count, money)
+    -- Length prefixes keep subjects and item names unambiguous even with punctuation.
+    local fields = { characterKey, string.lower(otherPlayer), subject, itemName or "",
+        tostring(count or 0), tostring(money or 0) }
+    for index, field in ipairs(fields) do
+        fields[index] = string.len(field) .. ":" .. field
+    end
+    return table.concat(fields)
+end
+
+local function importRTSHistory()
+    local history = {}
+    for key, timestamp in pairs(db.sentRTS) do
+        local fields, cursor = {}, 1
+        for index = 1, 6 do
+            local first, last, size = string.find(key, "(%d+):", cursor)
+            if first ~= cursor then break end
+            cursor = last + 1
+            size = tonumber(size)
+            if cursor + size - 1 > string.len(key) then break end
+            fields[index] = string.sub(key, cursor, cursor + size - 1)
+            cursor = cursor + size
+        end
+        if fields[6] and cursor == string.len(key) + 1 then
+            local _, _, sender = string.find(fields[1], "^(.-) %- ")
+            table.insert(history, {
+                key = key, owner = fields[1], sender = sender, recipient = fields[2],
+                subject = fields[3], name = fields[4] ~= "" and fields[4] or nil,
+                count = tonumber(fields[5]), money = tonumber(fields[6]), timestamp = timestamp,
+            })
+        end
+    end
+    table.sort(history, function(a, b) return a.timestamp < b.timestamp end)
+    return history
+end
+
+local function updateRTSReturns()
+    local seen = {}
+    for index = 1, GetInboxNumItems() do
+        local _, _, sender, subject, money, cod, _, hasItem = GetInboxHeaderInfo(index)
+        if isRTSSubject(subject) and (not cod or cod == 0) then
+            if not sender or sender == "" then return end
+            local name, quantity
+            if hasItem and hasItem ~= 0 then
+                name, quantity = inboxItem(index)
+                if not name or not quantity or quantity == 0 then return end
+            end
+            local key = rtsMailKey(sender, subject, name, quantity, money)
+            if db.sentRTS[key] then seen[key] = (seen[key] or 0) + 1 end
+        end
+    end
+    local previous = db.rtsInboxSeen[characterKey] or {}
+    local now = time()
+    for key, count in pairs(seen) do
+        local added = count - (previous[key] or 0)
+        if added > 0 then
+            for _, item in ipairs(db.rtsHistory) do
+                if item.key == key and not item.returnedAt and item.timestamp > now - RETENTION then
+                    item.returnedAt = now
+                    added = added - 1
+                    if added == 0 then break end
+                end
+            end
+        end
+    end
+    db.rtsInboxSeen[characterKey] = seen
+end
+
+local function findRTSMail()
+    local first, count = nil, 0
+    for index = 1, GetInboxNumItems() do
+        local _, _, sender, subject, money, cod, _, hasItem, _, returned, _, _, gm =
+            GetInboxHeaderInfo(index)
+        local canDelete = InboxItemCanDelete(index)
+        local attached = hasItem and hasItem ~= 0
+        if isRTSSubject(subject) and sender and sender ~= "" and (not returned or returned == 0)
+            and (not gm or gm == 0) and (not canDelete or canDelete == 0)
+            and (not cod or cod == 0) and (attached or (money and money > 0)) then
+            local name, quantity
+            if attached then name, quantity = inboxItem(index) end
+            if not attached or (name and type(quantity) == "number" and quantity > 0) then
+                local key = rtsMailKey(sender, subject, name, quantity, money)
+                local sentAt = db.sentRTS[key]
+                if not sentAt or sentAt <= time() - RETENTION then
+                    first = first or index
+                    count = count + 1
+                end
+            end
+        end
+    end
+    return first, count
+end
+
+local function startRTSReturn(manual)
+    if not mailboxOpen or rts.returning or pending then return end
+    rts.returning = { manual = manual, nextAt = GetTime(), done = 0 }
+end
+
+local function stopRTSReturn(message)
+    if rts.returning.manual and DEFAULT_CHAT_FRAME then
+        DEFAULT_CHAT_FRAME:AddMessage("Mail Item Log: " .. message)
+    end
+    rts.returning = nil
+end
+
+local function pumpRTS()
+    local now = GetTime()
+    local returning = rts.returning
+    if not returning or pending then return end
+    if returning.waitUntil and now >= returning.waitUntil then
+        rts.autoBlocked = true
+        stopRTSReturn("Return stopped. The server did not confirm the last mail.")
+    elseif not returning.waitUntil and now >= returning.nextAt then
+        local index, count = findRTSMail()
+        if index then
+            returning.count = count
+            returning.waitUntil = now + 12
+            ReturnInboxItem(index)
+        else
+            stopRTSReturn(string.format("Returned %d RTS mail(s).", returning.done))
+        end
+    end
+end
+
 local function selectTab(tab)
     view, page = tab, 1
     db.lastTab = tab
@@ -489,7 +643,7 @@ local function selectTab(tab)
         local key = field[1]
         local box = window.filterBoxes[key]
         box:ClearFocus()
-        box:SetText(tabState[tab].filters[key] or "")
+        box:SetText(tabState[tab] and tabState[tab].filters[key] or "")
     end
     redraw()
 end
@@ -529,9 +683,30 @@ local function buildWindow()
         selectTab("shared")
         if ShowFriends then ShowFriends() end
     end)
+    frame.rtsTab = button(frame, "RTS", 110, 24, 355, -46, function()
+        selectTab("rts")
+    end)
+    frame.autoRTS = button(frame, "", 153, 22, 16, -138, function()
+        db.autoReturnRTS = not db.autoReturnRTS
+        if db.autoReturnRTS then
+            rts.autoBlocked = nil
+            if rts.inboxReady and findRTSMail() then startRTSReturn(false) end
+        elseif rts.returning and not rts.returning.manual then
+            if rts.returning.waitUntil then
+                rts.returning.stopAfterCurrent = true
+            else
+                stopRTSReturn("Auto-return is off.")
+            end
+        end
+        redraw()
+    end)
+    frame.logRTS = button(frame, "", 225, 22, 176, -138, function()
+        db.logRTSInSent = not db.logRTSInSent
+        redraw()
+    end)
     local menu = CreateFrame("Frame", nil, frame)
     menu:SetWidth(170)
-    menu:SetHeight(116)
+    menu:SetHeight(142)
     menu:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -17, -71)
     menu:SetFrameLevel(frame:GetFrameLevel() + 12)
     menu:EnableMouse(true)
@@ -625,7 +800,7 @@ local function buildWindow()
         selectTab(view)
     end)
     frame.headings = {}
-    for index = 1, table.getn(sentColumns) do
+    for index = 1, table.getn(rtsColumns) do
         local columnIndex = index
         frame.headings[index] = button(frame, "", 100, 23, 16, -170, function()
             local column = columnsByTab[view][columnIndex]
@@ -650,7 +825,7 @@ local function buildWindow()
         row:SetHeight(23)
         row:SetTexture(1, 1, 1, 0.045 * (index - 2 * math.floor(index / 2)))
         local cells = {}
-        for col = 1, table.getn(sentColumns) do
+        for col = 1, table.getn(rtsColumns) do
             cells[col] = label(frame, "GameFontHighlight", 21, -201 - (index - 1) * 23)
             cells[col]:SetHeight(16)
         end
@@ -683,6 +858,16 @@ redraw = function()
     enable(window.sentTab, view ~= "sent")
     enable(window.inboxTab, view ~= "inbox")
     enable(window.sharedTab, view ~= "shared")
+    enable(window.rtsTab, view ~= "rts")
+    if view == "rts" then
+        window.autoRTS:SetText(db.autoReturnRTS and "Auto-return RTS: On" or "Auto-return RTS: Off")
+        window.logRTS:SetText(db.logRTSInSent and "Record in Sent Items: On" or "Record in Sent Items: Off")
+        window.autoRTS:Show()
+        window.logRTS:Show()
+    else
+        window.autoRTS:Hide()
+        window.logRTS:Hide()
+    end
     if view == "shared" then
         window.friends:Show()
         window.sharedOwner:Show()
@@ -695,6 +880,13 @@ redraw = function()
         items = db.sent
         status = "Successful sends | Last 30 days"
         window.chooseInbox:Hide()
+    elseif view == "rts" then
+        window.chooseInbox:Hide()
+        items = {}
+        for _, item in ipairs(db.rtsHistory) do
+            if item.owner == characterKey then table.insert(items, item) end
+        end
+        status = "RTS sent by " .. characterName .. " | Last 30 days"
     elseif view == "shared" then
         window.chooseInbox:Hide()
         items = {}
@@ -786,6 +978,10 @@ redraw = function()
                 local field = column[1]
                 value = field == "recipient" and entry.recipient or entry.item[field]
                 if field == "timestamp" or field == "expires" then value = stamp(value) end
+                if field == "returnedAt" then value = value and "Returned" or "Not seen yet" end
+                if view == "rts" and field == "name" and not value and (entry.item.money or 0) > 0 then
+                    value = entry.item.money .. " copper"
+                end
             end
             cell:SetText(value and tostring(value) or "")
         end
@@ -813,16 +1009,23 @@ end
 local function installSendHook()
     local originalSendMail = SendMail
     SendMail = function(recipient, subject, body)
-        if mailboxOpen and not pending then
+        if mailboxOpen and not pending and recipient and recipient ~= "" and subject and subject ~= "" then
             local name, _, count = GetSendMailItem()
-            if name and count and count > 0 and recipient and recipient ~= ""
-                and subject and subject ~= "" then
+            local hasAttachment = name and type(count) == "number" and count > 0
+            local money = isRTSSubject(subject) and GetSendMailMoney() or 0
+            if hasAttachment or isRTSSubject(subject) then
                 pending = {
-                    name = name,
-                        count = count,
+                    name = hasAttachment and name or nil,
+                    count = hasAttachment and count or nil,
                     sender = characterName,
                     recipient = recipient,
                 }
+                if isRTSSubject(subject) then
+                    local _, _, trimmed = string.find(recipient, "^%s*(.-)%s*$")
+                    pending.rtsKey = rtsMailKey(trimmed or recipient, subject, pending.name, pending.count, money)
+                    pending.rtsSubject = subject
+                    pending.rtsMoney = money
+                end
             end
         end
         return originalSendMail(recipient, subject, body)
@@ -844,7 +1047,19 @@ events:SetScript("OnEvent", function()
         db = MailItemLogDB
         if not tabState[db.openingTab] then db.openingTab = "last" end
         if not tabState[db.lastTab] then db.lastTab = "sent" end
+        if db.autoReturnRTS == nil then db.autoReturnRTS = true end
+        if InboxFrame then
+            local returnButton = button(InboxFrame, "Return RTS", 104, 23, 0, 0, function()
+                startRTSReturn(true)
+            end)
+            returnButton:ClearAllPoints()
+            returnButton:SetPoint("TOPLEFT", MailFrame or InboxFrame, "TOPLEFT", 69, -35)
+        end
         db.sent = db.sent or {}
+        db.sentRTS = db.sentRTS or {}
+        db.rtsHistory = db.rtsHistory or importRTSHistory()
+        db.rtsInboxSeen = db.rtsInboxSeen or {}
+        if db.logRTSInSent == nil then db.logRTSInSent = true end
         db.inboxes = db.inboxes or {}
         characterName = UnitName("player")
         realm = GetRealmName()
@@ -868,19 +1083,60 @@ events:SetScript("OnEvent", function()
         elseif event == "MAIL_SHOW" then
             mailboxOpen = true
             pending = nil
+            rts.inboxReady, rts.autoBlocked = nil, nil
+            redraw()
         elseif event == "MAIL_CLOSED" then
             mailboxOpen = false
+            rts.inboxReady, rts.returning = nil, nil
+            redraw()
         elseif event == "MAIL_INBOX_UPDATE" and mailboxOpen then
             updateInbox()
+            updateRTSReturns()
+            rts.inboxReady = true
+            local returning = rts.returning
+            if returning and returning.waitUntil then
+                local _, count = findRTSMail()
+                if count < returning.count then
+                    returning.done = returning.done + 1
+                    if returning.stopAfterCurrent then
+                        stopRTSReturn("Auto-return is off.")
+                    else
+                        returning.waitUntil = nil
+                        returning.nextAt = GetTime() + 0.4
+                    end
+                end
+            elseif db.autoReturnRTS and not rts.autoBlocked and not returning and findRTSMail() then
+                startRTSReturn(false)
+            end
             redraw()
-        elseif event == "MAIL_SEND_SUCCESS" and pending then
-            pending.timestamp = time()
-            table.insert(db.sent, pending)
-            pending = nil
-            prune(time())
+        elseif event == "MAIL_SEND_SUCCESS" then
+            if pending then
+                pending.timestamp = time()
+                if pending.rtsKey then
+                    db.sentRTS[pending.rtsKey] = pending.timestamp
+                    table.insert(db.rtsHistory, {
+                        key = pending.rtsKey, owner = characterKey, sender = characterName,
+                        recipient = pending.recipient, subject = pending.rtsSubject,
+                        name = pending.name, count = pending.count, money = pending.rtsMoney,
+                        timestamp = pending.timestamp,
+                    })
+                end
+                if pending.name and (not pending.rtsKey or db.logRTSInSent) then
+                    table.insert(db.sent, {
+                        timestamp = pending.timestamp, name = pending.name, count = pending.count,
+                        sender = pending.sender, recipient = pending.recipient,
+                    })
+                end
+                pending = nil
+                prune(time())
+            end
             redraw()
         elseif event == "MAIL_FAILED" then
             pending = nil
+            if rts.returning and rts.returning.waitUntil then
+                rts.autoBlocked = true
+                stopRTSReturn("Return stopped. The server rejected the last mail.")
+            end
         elseif event == "PLAYER_LOGOUT" then
             prune(time())
         end
@@ -892,6 +1148,7 @@ events:SetScript("OnUpdate", function()
     if not db then return end
     elapsed = elapsed + arg1
     if incoming or outgoing or transfer then pumpSharing() end
+    if rts.returning then pumpRTS() end
     if elapsed >= 60 then
         elapsed = 0
         prune(time())
