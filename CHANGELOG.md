@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Added a short RTS usage guide beside the settings.
+
 ## 0.6.0
 
 - Added the RTS tab with sent RTS history and mailbox-observed return status.

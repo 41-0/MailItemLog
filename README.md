@@ -26,7 +26,7 @@ The lists display 12 entries per page. Click a column heading to sort, or click 
 
 ## Sharing an inbox
 
-1. Both players must be online, have each other on their friends lists, and run Mail Item Log with the same sharing protocol. Versions 0.4.0 through 0.6.0 use the same protocol.
+1. Both players must be online, have each other on their friends lists, and run Mail Item Log with the same sharing protocol. Versions 0.4.0 through 0.6.1 use the same protocol.
 2. In **Shared Inbox**, click a friend and select **Yes** at the **Send Request?** prompt.
 3. Your friend can select **Approve** or **Decline** in a small notification. They can drag that notification to reposition it for future requests.
 4. After approval, the addon sends the friend's last saved attachment list through in-game whispers. If they have no saved inbox, they need to open a mailbox before you request it again.

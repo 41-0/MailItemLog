@@ -704,6 +704,10 @@ local function buildWindow()
         db.logRTSInSent = not db.logRTSInSent
         redraw()
     end)
+    frame.rtsHelp = label(frame, "GameFontHighlightSmall", 417, -138)
+    frame.rtsHelp:SetWidth(380)
+    frame.rtsHelp:SetText("Start the subject with RTS (e.g. RTS [1/3]).\n"
+        .. "Recipient: open the mailbox with auto-return on, or click Return RTS.")
     local menu = CreateFrame("Frame", nil, frame)
     menu:SetWidth(170)
     menu:SetHeight(142)
@@ -864,9 +868,11 @@ redraw = function()
         window.logRTS:SetText(db.logRTSInSent and "Record in Sent Items: On" or "Record in Sent Items: Off")
         window.autoRTS:Show()
         window.logRTS:Show()
+        window.rtsHelp:Show()
     else
         window.autoRTS:Hide()
         window.logRTS:Hide()
+        window.rtsHelp:Hide()
     end
     if view == "shared" then
         window.friends:Show()
