@@ -73,6 +73,7 @@ function M.pumpInbox(now)
                 GetInboxHeaderInfo(index)
             if scan ~= job then return end
             local name, count, icon, quality
+            daysLeft = tonumber(daysLeft)
             local attached = hasItem and hasItem ~= 0
             if attached then
                 name, count, icon, quality = M.inboxItem(index)

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+- Stop a failing mailbox scan and report the original error once in chat. Reopening the mailbox allows another scan.
+- Guard the frame update against missing elapsed time.
+
 ## 0.7.0
 
 - Split the GUI and each mail feature into separate Lua files.

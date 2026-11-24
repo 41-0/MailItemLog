@@ -1,6 +1,24 @@
 local M = MailItemLogAddon
 
 local events = CreateFrame("Frame", "MailItemLogEvents")
+local mailboxFailed
+local reportedFailures = {}
+
+local function reportFailure(area, message)
+    if reportedFailures[area] then return end
+    reportedFailures[area] = true
+    local detail = "Mail Item Log (" .. area .. "): " .. tostring(message)
+    if DEFAULT_CHAT_FRAME then
+        DEFAULT_CHAT_FRAME:AddMessage(detail)
+    else
+        error(detail)
+    end
+end
+
+local function updateMailbox(now)
+    M.pumpInbox(now)
+    M.pumpRTS(now)
+end
 
 events:RegisterEvent("FRIENDLIST_UPDATE")
 events:RegisterEvent("CHAT_MSG_WHISPER")
@@ -35,6 +53,7 @@ events:SetScript("OnEvent", function()
             if M.view == "shared" then M.redraw() end
         elseif event == "MAIL_SHOW" then
             M.mailboxOpen = true
+            mailboxFailed = nil
             M.pending = nil
             rts.inboxReady, rts.autoBlocked = nil, nil
         elseif event == "MAIL_CLOSED" then
@@ -42,7 +61,7 @@ events:SetScript("OnEvent", function()
             M.cancelInboxScan()
             rts.inboxReady, rts.returning = nil, nil
             if M.view == "inbox" then M.redraw() end
-        elseif event == "MAIL_INBOX_UPDATE" and M.mailboxOpen then
+        elseif event == "MAIL_INBOX_UPDATE" and M.mailboxOpen and not mailboxFailed then
             M.scheduleInboxScan()
         elseif event == "MAIL_SEND_SUCCESS" then
             M.finishSend()
@@ -61,12 +80,21 @@ end)
 local elapsed = 0
 events:SetScript("OnUpdate", function()
     if not M.db then return end
-    elapsed = elapsed + arg1
-    M.pumpSharing()
+    if type(arg1) == "number" then elapsed = elapsed + arg1 end
+    if not reportedFailures["sharing"] then
+        local ok, message = pcall(M.pumpSharing)
+        if not ok then reportFailure("sharing", message) end
+    end
     if M.inboxScanPending or M.rts.returning then
-        local now = GetTime()
-        M.pumpInbox(now)
-        M.pumpRTS(now)
+        local ok, message = pcall(updateMailbox, GetTime())
+        if not ok then
+            mailboxFailed = true
+            M.cancelInboxScan()
+            M.rts.returning = nil
+            M.rts.inboxReady = nil
+            M.rts.autoBlocked = true
+            reportFailure("mailbox scan paused", message)
+        end
     end
     if elapsed >= 60 then
         elapsed = 0
