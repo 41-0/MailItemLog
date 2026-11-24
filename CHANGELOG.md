@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.0
+
+- Split the GUI and each mail feature into separate Lua files.
+- Coalesced mailbox updates and spread inbox reads and RTS history checks across frames.
+- Revalidated RTS return candidates before use and canceled pending scans when the mailbox closes.
+
 ## 0.6.3
 
 - Added a Clear All button for saved inbox lists.
