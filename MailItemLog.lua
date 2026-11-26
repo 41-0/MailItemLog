@@ -53,24 +53,27 @@ events:SetScript("OnEvent", function()
             if M.view == "shared" then M.redraw() end
         elseif event == "MAIL_SHOW" then
             M.mailboxOpen = true
+            rts.mailboxOpenedAt = GetTime()
+            rts.firstInboxUpdateAt = nil
             mailboxFailed = nil
             M.pending = nil
             rts.inboxReady, rts.autoBlocked = nil, nil
         elseif event == "MAIL_CLOSED" then
             M.mailboxOpen = false
             M.cancelInboxScan()
-            rts.inboxReady, rts.returning = nil, nil
+            if rts.returning then M.stopRTSReturn("RTS stopped: mailbox closed.") end
+            rts.inboxReady, rts.inboxRefreshDeferred = nil, nil
+            rts.mailboxOpenedAt, rts.firstInboxUpdateAt = nil, nil
             if M.view == "inbox" then M.redraw() end
         elseif event == "MAIL_INBOX_UPDATE" and M.mailboxOpen and not mailboxFailed then
+            rts.firstInboxUpdateAt = rts.firstInboxUpdateAt or GetTime()
             M.scheduleInboxScan()
         elseif event == "MAIL_SEND_SUCCESS" then
             M.finishSend()
         elseif event == "MAIL_FAILED" then
+            local wasSending = M.pending
             M.pending = nil
-            if rts.returning and rts.returning.waitUntil then
-                rts.autoBlocked = true
-                M.stopRTSReturn("Return stopped. The server rejected the last mail.")
-            end
+            if not wasSending then M.noteRTSFailure() end
         elseif event == "PLAYER_LOGOUT" then
             M.prune(time())
         end
@@ -90,7 +93,8 @@ events:SetScript("OnUpdate", function()
         if not ok then
             mailboxFailed = true
             M.cancelInboxScan()
-            M.rts.returning = nil
+            M.rts.inboxRefreshDeferred = nil
+            M.stopRTSReturn("RTS stopped: mailbox scan paused.")
             M.rts.inboxReady = nil
             M.rts.autoBlocked = true
             reportFailure("mailbox scan paused", message)
@@ -105,3 +109,6 @@ end)
 
 SLASH_MAILITEMLOG1 = "/maillog"
 SlashCmdList["MAILITEMLOG"] = M.toggleWindow
+
+SLASH_MAILITEMLOGRTSTIMING1 = "/milrtstime"
+SlashCmdList["MAILITEMLOGRTSTIMING"] = M.toggleRTSTiming

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.7.8
+
+- Added mailbox-open and manual-button startup timings to `/milrtstime`.
+
+## 0.7.7
+
+- Keep the fast RTS interval when the inbox confirms a return despite a mail failure notification. Use backoff when a return remains unconfirmed and needs a retry.
+
+## 0.7.6
+
+- Skip unrelated attachment reads and defer saved inbox display updates during RTS batches.
+- Added optional batch timing via `/milrtstime`.
+
+## 0.7.5
+
+- Send the next RTS return as soon as the previous one is confirmed and the short minimum interval has elapsed. Use the longer interval for the rest of the batch if a mail failure is reported.
+
+## 0.7.4
+
+- Verify the inbox after a mail failure event before stopping an RTS batch. Retry an explicitly failed return once if the same mail is still eligible.
+- Leave a longer interval between RTS requests.
+
+## 0.7.3
+
+- Request one mailbox refresh if a return has yet to appear in the cached inbox.
+- Allow batch confirmation when an unrelated RTS message has uncached details, and report why a batch stops.
+
+## 0.7.2
+
+- Continue RTS batches after each returned message is confirmed, even if an inbox update event is missing or another RTS message arrives in the meantime.
+
 ## 0.7.1
 
 - Stop a failing mailbox scan and report the original error once in chat. Reopening the mailbox allows another scan.

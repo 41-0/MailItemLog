@@ -47,6 +47,8 @@ The **RTS** tab lists RTS mail sent by the current character over the last 30 da
 
 **Record in Sent Items** is on by default. Turn it off to omit future RTS sends from the general attachment log. The RTS history and return tracking still run.
 
+Use `/milrtstime` to toggle RTS timing for the current session. After a batch, chat shows the time from opening the mailbox to the first return request, the total batch duration, the last 12 attempts, confirmation time, elapsed scan span and frame count, and any backoff. During a return batch, the addon reads only RTS attachment details. It refreshes the saved display list after the batch.
+
 ## Data retention
 
 The addon removes sent records 30 days after sending and saved inbox snapshots 30 days after their last refresh. This cleanup affects only the addon's records. The game's mail and attachments remain in the mailbox according to the game's own expiration rules.

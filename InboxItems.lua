@@ -55,9 +55,12 @@ function M.pumpInbox(now)
     local job = scan
     if not job then
         if now < scanAt then return end
-        job = { index = 1, timestamp = time(), items = {}, seen = {}, eligible = 0, matches = {} }
+        job = { index = 1, timestamp = time(), items = {}, seen = {}, rtsCounts = {}, matches = {} }
+        job.rtsOnly = M.rts.returning ~= nil
+        if job.rtsOnly then M.rts.inboxRefreshDeferred = true end
         scan = job
     end
+    M.noteRTSScanFrame(now)
     local total = GetInboxNumItems()
     if scan ~= job then return end
     if job.total and job.total ~= total then
@@ -73,12 +76,12 @@ function M.pumpInbox(now)
                 GetInboxHeaderInfo(index)
             if scan ~= job then return end
             local name, count, icon, quality
-            daysLeft = tonumber(daysLeft)
             local attached = hasItem and hasItem ~= 0
-            if attached then
+            if attached and (not job.rtsOnly or M.isRTSSubject(subject)) then
                 name, count, icon, quality = M.inboxItem(index)
                 if scan ~= job then return end
-                if name and type(count) == "number" and count > 0 then
+                if not job.rtsOnly and name and type(count) == "number" and count > 0 then
+                    daysLeft = tonumber(daysLeft)
                     table.insert(job.items, {
                         name = name, count = count, icon = icon, quality = quality, sender = sender or "?",
                         expires = daysLeft and daysLeft > 0 and math.floor(job.timestamp + daysLeft * 86400) or nil,
@@ -95,9 +98,11 @@ function M.pumpInbox(now)
 
     if not M.scanRTSHistory(job, HISTORY_PER_FRAME) then return end
     M.cancelInboxScan()
-    M.db.inboxes[M.characterKey] = { timestamp = job.timestamp, items = job.items }
+    if not job.rtsOnly then
+        M.db.inboxes[M.characterKey] = { timestamp = job.timestamp, items = job.items }
+    end
     M.finishRTSScan(job, now)
-    if M.view == "inbox" or M.view == "rts" then M.redraw() end
+    if not job.rtsOnly and (M.view == "inbox" or M.view == "rts") then M.redraw() end
 end
 
 function M.buildInboxControls(frame)
