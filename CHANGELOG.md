@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.10
+
+- Moved the Return RTS button up by 7 UI units.
+
+## 0.7.9
+
+- Moved the Return RTS button down by one button height.
+
 ## 0.7.8
 
 - Added mailbox-open and manual-button startup timings to `/milrtstime`.

@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: Mail Item Log
 ## Notes: Outgoing attachments and last-seen inbox contents.
-## Version: 0.7.8
+## Version: 0.7.10
 ## SavedVariables: MailItemLogDB
 Core.lua
 SentItems.lua

@@ -319,7 +319,7 @@ function M.initializeRTS()
         M.startRTSReturn(true)
     end)
     control:ClearAllPoints()
-    control:SetPoint("TOPLEFT", MailFrame or InboxFrame, "TOPLEFT", 69, -35)
+    control:SetPoint("TOPLEFT", MailFrame or InboxFrame, "TOPLEFT", 69, -51)
 end
 
 function M.buildRTSControls(frame)
