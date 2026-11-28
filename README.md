@@ -13,6 +13,9 @@ The addon targets WoW 1.12 clients (`Interface: 11200`). Compatibility with thir
 
 ## Tabs
 
+Hover over an item name or icon to see its tooltip. If a record has no stored item link, the addon tries an exact item-name lookup in the client cache. When that lookup fails, the tooltip shows the item name. Shared Inbox can transmit links between compatible versions.
+
+
 Use **Open on** to choose which tab appears each time you open the window. Choose **Last used tab** (the default), **Sent Items**, **Inbox Items**, **Shared Inbox**, or **RTS**. The setting and last used tab are saved across sessions.
 
 | Tab | What it shows |

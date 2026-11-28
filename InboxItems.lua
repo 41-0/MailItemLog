@@ -83,8 +83,11 @@ function M.pumpInbox(now)
                 if scan ~= job then return end
                 if not job.rtsOnly and name and type(count) == "number" and count > 0 then
                     daysLeft = tonumber(daysLeft)
+                    local itemString = M.mailItemString(GetInboxItemLink, index)
+                    if scan ~= job then return end
                     table.insert(job.items, {
                         name = name, count = count, icon = icon, quality = quality, sender = sender or "?",
+                        itemString = itemString,
                         expires = daysLeft and daysLeft > 0 and math.floor(job.timestamp + daysLeft * 86400) or nil,
                     })
                 end

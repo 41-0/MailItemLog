@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.8
+
+- Removed third-party tooltip integrations and their diagnostic command.
+
+## 0.8.7
+
+- Recover missing tooltip links from the client item cache and add optional tooltip diagnostics.
+
+## 0.8.6
+
+- Fixed a hover error when the client still uses an older addon load list.
+
+## 0.8.5
+
+- Added optional item-tooltip integration with EnhTooltip, QuestItem, and SellValue.
+
+## 0.8.4
+
+- Added item tooltips to all tabs with backward-compatible link sharing.
+
 ## 0.8.3
 
 - Show the 100-mail limit in My Characters.

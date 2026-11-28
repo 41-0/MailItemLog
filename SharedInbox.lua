@@ -67,6 +67,9 @@ local function reply(accepted)
             if request.itemAppearance then
                 line = line .. "|" .. (item.icon or "") .. "|" .. tostring(item.quality or -1)
             end
+            if request.itemLinks and item.itemString then
+                line = line .. "|" .. item.itemString
+            end
             table.insert(records, line .. "\n")
         end
     end
@@ -144,12 +147,18 @@ local function parseSnapshot(data, sender)
     local records = {}
     local cursor = headerEnd + 1
     while cursor <= string.len(data) do
-        local first, last, name, count, from, expires, icon, quality =
-            string.find(data, "([^|\n]*)|(%d+)|([^|\n]*)|(%d+)|([%w_%-]*)|(-?%d+)\n", cursor)
+        local first, last, name, count, from, expires, icon, quality, itemString =
+            string.find(data, "([^|\n]*)|(%d+)|([^|\n]*)|(%d+)|([%w_%-]*)|(-?%d+)|(item:[%d:%-]+)\n", cursor)
         if first ~= cursor then
-            first, last, name, count, from, expires =
-                string.find(data, "([^|\n]*)|(%d+)|([^|\n]*)|(%d+)\n", cursor)
-            if first ~= cursor then return end
+            first, last, name, count, from, expires, icon, quality =
+                string.find(data, "([^|\n]*)|(%d+)|([^|\n]*)|(%d+)|([%w_%-]*)|(-?%d+)\n", cursor)
+            itemString = nil
+            if first ~= cursor then
+                first, last, name, count, from, expires =
+                    string.find(data, "([^|\n]*)|(%d+)|([^|\n]*)|(%d+)\n", cursor)
+                if first ~= cursor then return end
+                icon, quality = nil, nil
+            end
         end
         quality = tonumber(quality)
         expires = tonumber(expires)
@@ -160,6 +169,7 @@ local function parseSnapshot(data, sender)
             name = itemName, count = tonumber(count), sender = senderName,
             icon = icon and icon ~= "" and icon or nil,
             quality = quality and quality >= 0 and quality <= 8 and quality or nil,
+            itemString = M.itemString(itemString),
             expires = expires > 0 and expires or nil,
         })
         cursor = last + 1
@@ -182,6 +192,11 @@ function M.receivePacket(message, author)
         return
     end
     if kind == "A" then
+        if payload == "I" and incoming and incoming.itemAppearance and incoming.id == id
+            and string.lower(author) == string.lower(incoming.name) then
+            incoming.itemLinks = true
+            return
+        end
         if transfer and id == transfer.id and string.lower(author) == string.lower(transfer.name)
             and transfer.offset <= string.len(transfer.data) and transfer.attempts > 0
             and tonumber(payload) == transfer.sequence then
@@ -285,7 +300,9 @@ StaticPopupDialogs["MAILITEMLOG_REQUEST"] = {
         M.sharedSnapshot = nil
         M.page = 1
         M.sharedStatus = "Waiting for " .. target .. " to approve..."
+        -- Legacy recipients already understand the appearance request and ignore a nonnumeric ACK.
         sendPacket(target, "R", id, "I")
+        sendPacket(target, "A", id, "I")
         M.redraw()
     end,
 }

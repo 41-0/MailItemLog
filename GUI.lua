@@ -141,6 +141,38 @@ local function selectTab(tab)
     M.redraw()
 end
 
+local tooltipOwner
+
+local function hideItemTooltip(region)
+    if tooltipOwner == region then
+        if not GameTooltip.IsOwned or GameTooltip:IsOwned(region) then GameTooltip:Hide() end
+        tooltipOwner = nil
+    end
+end
+
+local function showItemTooltip(region)
+    local item = region.item
+    if not item or not item.name or not GameTooltip then return end
+    GameTooltip:SetOwner(region, "ANCHOR_RIGHT")
+    tooltipOwner = region
+    GameTooltip:ClearLines()
+    local itemString = M.itemString(item.itemString)
+    if not itemString and type(GetItemInfo) == "function" then
+        local ok, name, link = pcall(GetItemInfo, item.name)
+        if ok and name == item.name then itemString = M.itemString(link) end
+    end
+    if itemString then
+        local ok = pcall(GameTooltip.SetHyperlink, GameTooltip, itemString)
+        if ok and (not GameTooltip.NumLines or GameTooltip:NumLines() > 0) then
+            GameTooltip:Show()
+            return
+        end
+        GameTooltip:ClearLines()
+    end
+    GameTooltip:AddLine(item.name)
+    GameTooltip:Show()
+end
+
 local function buildWindow()
     local frame = CreateFrame("Frame", "MailItemLogWindow", UIParent)
     frame:SetWidth(825)
@@ -264,6 +296,7 @@ local function buildWindow()
     end
     frame.rows = {}
     frame.itemIcons = {}
+    frame.itemHover = {}
     for index = 1, M.PAGE_SIZE do
         local row = frame:CreateTexture(nil, "BACKGROUND")
         row:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -196 - (index - 1) * 23)
@@ -281,6 +314,14 @@ local function buildWindow()
         icon:SetHeight(16)
         icon:Hide()
         frame.itemIcons[index] = icon
+        local hover = CreateFrame("Frame", nil, frame)
+        hover:EnableMouse(true)
+        hover:SetHeight(23)
+        hover:SetScript("OnEnter", function() showItemTooltip(hover) end)
+        hover:SetScript("OnLeave", function() hideItemTooltip(hover) end)
+        hover:SetScript("OnHide", function() hideItemTooltip(hover) end)
+        hover:Hide()
+        frame.itemHover[index] = hover
     end
     frame.previous = M.button(frame, "Previous", 90, 23, 16, -487, function()
         M.page = M.page - 1
@@ -392,6 +433,10 @@ M.redraw = function()
                     local icon = window.itemIcons[rowIndex]
                     icon:ClearAllPoints()
                     icon:SetPoint("TOPLEFT", window, "TOPLEFT", x + 5, -199 - (rowIndex - 1) * 23)
+                    local hover = window.itemHover[rowIndex]
+                    hover:ClearAllPoints()
+                    hover:SetPoint("TOPLEFT", window, "TOPLEFT", x, -196 - (rowIndex - 1) * 23)
+                    hover:SetWidth(column[3])
                     inset = inset + 21
                 end
                 cell:SetPoint("TOPLEFT", window, "TOPLEFT", x + inset, -201 - (rowIndex - 1) * 23)
@@ -405,6 +450,14 @@ M.redraw = function()
     for index, cells in ipairs(window.rows) do
         local entry = entries[(M.page - 1) * M.PAGE_SIZE + index]
         local item = entry and entry.item
+        local hover = window.itemHover[index]
+        if hover.item ~= item then hideItemTooltip(hover) end
+        hover.item = item
+        if item and item.name then
+            hover:Show()
+        else
+            hover:Hide()
+        end
         local icon = window.itemIcons[index]
         if item and item.icon then
             icon:SetTexture("Interface\\Icons\\" .. item.icon)

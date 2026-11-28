@@ -19,6 +19,7 @@ function M.installSendHook()
                     name = hasAttachment and name or nil,
                     count = hasAttachment and count or nil,
                     icon = icon,
+                    itemString = hasAttachment and M.mailItemString(GetSendMailItemLink) or nil,
                     quality = quality,
                     sender = M.characterName,
                     recipient = recipient,
@@ -42,7 +43,7 @@ function M.finishSend()
     if M.pending.name and (not M.pending.rtsKey or M.db.logRTSInSent) then
         table.insert(M.db.sent, {
             timestamp = timestamp, name = M.pending.name, count = M.pending.count,
-            icon = M.pending.icon, quality = M.pending.quality,
+            icon = M.pending.icon, quality = M.pending.quality, itemString = M.pending.itemString,
             sender = M.pending.sender, recipient = M.pending.recipient,
         })
     end

@@ -303,7 +303,7 @@ function M.recordRTSSend(mail, timestamp)
         key = mail.rtsKey, owner = M.characterKey, sender = M.characterName,
         recipient = mail.recipient, subject = mail.rtsSubject,
         name = mail.name, count = mail.count, money = mail.rtsMoney,
-        icon = mail.icon, quality = mail.quality, timestamp = timestamp,
+        icon = mail.icon, quality = mail.quality, itemString = mail.itemString, timestamp = timestamp,
     })
     if M.inboxScanPending or M.rts.candidate then M.scheduleInboxScan() end
 end

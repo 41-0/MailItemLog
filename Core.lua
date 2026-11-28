@@ -54,3 +54,17 @@ end
 function M.inboxItem(index)
     return M.itemDetails(GetInboxItem(index))
 end
+
+function M.itemString(link)
+    if type(link) ~= "string" then return end
+    local _, _, value = string.find(link, "|H(item:[^|]+)|h")
+    value = value or link
+    if string.len(value) <= 160 and string.find(value, "^item:%d+[:%d%-]*$") then return value end
+end
+
+function M.mailItemString(getLink, index)
+    if type(getLink) ~= "function" then return end
+    local ok, link
+    if index then ok, link = pcall(getLink, index) else ok, link = pcall(getLink) end
+    if ok then return M.itemString(link) end
+end

@@ -65,6 +65,7 @@ local function readRecords()
                 name = f[3], count = tonumber(f[4]), icon = f[5] ~= "" and f[5] or nil,
                 quality = tonumber(f[6]), sender = f[7] ~= "" and f[7] or nil,
                 timestamp = tonumber(f[8]), delta = tonumber(f[9]),
+                itemString = M.itemString(f[10]) or (f[1] == "B" and M.itemString(f[2]) or nil),
             }
             if f[1] == "B" then record.bags[f[2]] = row
             elseif f[1] == "I" then table.insert(record.inbox, row)
@@ -84,7 +85,7 @@ local function writeRecords(all)
     end
     local function row(kind, id, item)
         line({kind, id, item.name, item.count, item.icon or "", item.quality or "",
-            item.sender or "", item.timestamp or "", item.delta or ""})
+            item.sender or "", item.timestamp or "", item.delta or "", item.itemString or ""})
     end
     for _, record in pairs(all) do
         line({"C", record.realm, record.name, record.class, record.level or "", record.gold or "",
@@ -133,7 +134,7 @@ local function recordChanges(record, bag)
             changed = true
             table.insert(record.changes, {
                 name = item.name, count = item.count, icon = item.icon,
-                quality = item.quality, timestamp = bag.timestamp, delta = delta,
+                quality = item.quality, timestamp = bag.timestamp, delta = delta, itemString = item.itemString,
             })
         end
         for id, item in pairs(bag.items) do
@@ -142,7 +143,7 @@ local function recordChanges(record, bag)
         end
         for id, item in pairs(record.bags) do
             if not bag.items[id] then
-                add({name = item.name, count = 0, icon = item.icon, quality = item.quality}, -item.count)
+                add({name = item.name, count = 0, icon = item.icon, quality = item.quality, itemString = item.itemString}, -item.count)
             end
         end
         if record.gold and bag.gold ~= record.gold then
@@ -237,7 +238,7 @@ function M.pumpCharacters(now)
                     local row = scan.items[id]
                     if not row then
                         local _, _, icon = M.itemDetails(name, texture, count)
-                        row = {name = name, count = 0, icon = icon}
+                        row = {name = name, count = 0, icon = icon, itemString = M.itemString(link)}
                         scan.items[id] = row
                     end
                     row.count = row.count + (count or 1)
