@@ -54,3 +54,11 @@ Use `/milrtstime` to toggle RTS timing for the current session. After a batch, c
 The addon removes sent records 30 days after sending and saved inbox snapshots 30 days after their last refresh. This cleanup affects only the addon's records. The game's mail and attachments remain in the mailbox according to the game's own expiration rules.
 
 See [CHANGELOG.md](CHANGELOG.md) for release history and [LICENSE](LICENSE) for the MIT license.
+
+## My Characters
+
+**My Characters requires Nampower.** Use a version that provides `ImportFile` and `ExportFile`, and launch the game with Nampower enabled.
+
+**My Characters** displays records from characters on the same realm across accounts using the same client folder. Open a carried bag outside combat to record all carried bags and money. Opening a mailbox records the loaded inbox. **Changes** keeps the latest 200 item or coin changes per character, with timestamps. The first bag scan establishes a baseline.
+
+My Characters displays the inbox count against the target server's 100-mail limit. It uses the total reported by the client when available, or the loaded count otherwise. The shared file is local to the client installation.

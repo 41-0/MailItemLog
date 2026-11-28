@@ -4,6 +4,7 @@ M.tabState = {
     sent = { sort = "timestamp", ascending = false, filters = {} },
     inbox = { sort = "name", ascending = true, filters = {} },
     shared = { sort = "name", ascending = true, filters = {} },
+    characters = { sort = "name", ascending = true, filters = {} },
     rts = { sort = "timestamp", ascending = false, filters = {} },
 }
 local openingTabs = {
@@ -12,6 +13,7 @@ local openingTabs = {
     { "inbox", "Inbox Items" },
     { "shared", "Shared Inbox" },
     { "rts", "RTS" },
+    { "characters", "My Characters" },
 }
 local filterFields = {
     { "name", "Item" },
@@ -87,7 +89,7 @@ function M.stamp(timestamp)
     return timestamp and date("%Y-%m-%d %H:%M", timestamp) or "-"
 end
 
-local columnsByTab = { sent = M.sentColumns, inbox = M.inboxColumns, shared = M.sharedColumns, rts = M.rtsColumns }
+local columnsByTab = { sent = M.sentColumns, inbox = M.inboxColumns, shared = M.sharedColumns, rts = M.rtsColumns, characters = M.characterColumns }
 
 local function visibleItems(items, inboxRecipient, now)
     local state = M.tabState[M.view]
@@ -129,6 +131,7 @@ end
 local function selectTab(tab)
     M.view, M.page = tab, 1
     M.db.lastTab = tab
+    if tab == "characters" then M.reloadCharacters() end
     for _, field in ipairs(filterFields) do
         local key = field[1]
         local box = window.filterBoxes[key]
@@ -176,10 +179,16 @@ local function buildWindow()
     frame.rtsTab = M.button(frame, "RTS", 110, 24, 355, -46, function()
         selectTab("rts")
     end)
+    if M.characterModuleLoaded then
+        frame.characterTab = M.button(frame, "My Characters", 121, 24, 468, -46, function()
+            selectTab("characters")
+        end)
+        M.buildCharacterControls(frame)
+    end
     M.buildRTSControls(frame)
     local menu = CreateFrame("Frame", nil, frame)
     menu:SetWidth(170)
-    menu:SetHeight(142)
+    menu:SetHeight(M.characterModuleLoaded and 168 or 142)
     menu:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -17, -71)
     menu:SetFrameLevel(frame:GetFrameLevel() + 12)
     menu:EnableMouse(true)
@@ -196,12 +205,14 @@ local function buildWindow()
     end)
     for index, option in ipairs(openingTabs) do
         local key, title = option[1], option[2]
-        M.button(menu, title, 152, 22, 9, -8 - (index - 1) * 26, function()
-            M.db.openingTab = key
-            opener:SetText("Open on: " .. title)
-            menu:Hide()
-        end)
-        if M.db.openingTab == key then opener:SetText("Open on: " .. title) end
+        if key ~= "characters" or M.characterModuleLoaded then
+            M.button(menu, title, 152, 22, 9, -8 - (index - 1) * 26, function()
+                M.db.openingTab = key
+                opener:SetText("Open on: " .. title)
+                menu:Hide()
+            end)
+            if M.db.openingTab == key then opener:SetText("Open on: " .. title) end
+        end
     end
     M.buildSharedControls(frame)
     M.buildInboxControls(frame)
@@ -298,6 +309,18 @@ M.redraw = function()
     M.enable(window.inboxTab, M.view ~= "inbox")
     M.enable(window.sharedTab, M.view ~= "shared")
     M.enable(window.rtsTab, M.view ~= "rts")
+    if window.characterTab then
+        if M.view == "characters" then
+            window.characterList:Show()
+            window.characterMode:Show()
+            window.characterInfo:Show()
+        else
+            window.characterList:Hide()
+            window.characterMode:Hide()
+            window.characterInfo:Hide()
+        end
+        M.enable(window.characterTab, M.view ~= "characters")
+    end
     if M.view == "inbox" then
         window.clearInboxes:Show()
         M.enable(window.clearInboxes, next(M.db.inboxes) ~= nil)
@@ -328,6 +351,8 @@ M.redraw = function()
         items, status = M.db.sent, "Successful sends | Last 30 days"
     elseif M.view == "rts" then
         items, status = M.getRTSTabItems()
+    elseif M.view == "characters" then
+        items, status, inboxRecipient = M.getCharacterTabItems(window)
     elseif M.view == "shared" then
         items, status, inboxRecipient = M.getSharedTabItems(window, now)
     else
@@ -346,7 +371,7 @@ M.redraw = function()
     M.enable(window.previous, M.page > 1)
     M.enable(window.next, M.page < pages)
 
-    local x = M.view == "shared" and 183 or 16
+    local x = (M.view == "shared" or M.view == "characters") and 183 or 16
     for index, heading in ipairs(window.headings) do
         local column = columns[index]
         if column then
@@ -395,6 +420,7 @@ M.redraw = function()
                 local field = column[1]
                 value = field == "recipient" and entry.recipient or entry.item[field]
                 if field == "timestamp" or field == "expires" then value = M.stamp(value) end
+                if field == "delta" and value and value > 0 then value = "+" .. value end
                 if field == "returnedAt" then value = value and "Returned" or "Not seen yet" end
                 if M.view == "rts" and field == "name" and not value and (entry.item.money or 0) > 0 then
                     value = entry.item.money .. " copper"
@@ -421,6 +447,7 @@ function M.toggleWindow()
         if M.view ~= tab then
             selectTab(tab)
         else
+            if tab == "characters" then M.reloadCharacters() end
             M.db.lastTab = tab
             M.redraw()
         end

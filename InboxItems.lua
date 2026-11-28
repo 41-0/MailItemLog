@@ -61,13 +61,14 @@ function M.pumpInbox(now)
         scan = job
     end
     M.noteRTSScanFrame(now)
-    local total = GetInboxNumItems()
+    local total, mailTotal = GetInboxNumItems()
     if scan ~= job then return end
     if job.total and job.total ~= total then
         M.scheduleInboxScan()
         return
     end
     job.total = total
+    job.mailTotal = type(mailTotal) == "number" and mailTotal >= total and mailTotal or nil
 
     if not job.historyIndex then
         local last = math.min(job.total, job.index + MAIL_PER_FRAME - 1)
@@ -100,6 +101,7 @@ function M.pumpInbox(now)
     M.cancelInboxScan()
     if not job.rtsOnly then
         M.db.inboxes[M.characterKey] = { timestamp = job.timestamp, items = job.items }
+        if M.characterModuleLoaded then M.recordCharacterInbox(job) end
     end
     M.finishRTSScan(job, now)
     if not job.rtsOnly and (M.view == "inbox" or M.view == "rts") then M.redraw() end

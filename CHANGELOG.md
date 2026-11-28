@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.3
+
+- Show the 100-mail limit in My Characters.
+
+## 0.8.2
+
+- Added a scrollable character sidebar to My Characters.
+
+## 0.8.1
+
+- Keep existing tabs and mailbox functions working if the My Characters module is missing from the client load list.
+
+## 0.8.0
+
+- Added My Characters with shared local bag, money and inbox snapshots and timestamped bag changes.
+
 ## 0.7.10
 
 - Moved the Return RTS button up by 7 UI units.

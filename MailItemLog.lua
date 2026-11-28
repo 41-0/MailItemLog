@@ -24,6 +24,9 @@ events:RegisterEvent("FRIENDLIST_UPDATE")
 events:RegisterEvent("CHAT_MSG_WHISPER")
 events:RegisterEvent("PLAYER_LOGIN")
 events:RegisterEvent("PLAYER_LOGOUT")
+events:RegisterEvent("BAG_UPDATE")
+events:RegisterEvent("PLAYER_REGEN_DISABLED")
+events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:RegisterEvent("MAIL_SHOW")
 events:RegisterEvent("MAIL_CLOSED")
 events:RegisterEvent("MAIL_INBOX_UPDATE")
@@ -34,6 +37,12 @@ events:SetScript("OnEvent", function()
         MailItemLogDB = MailItemLogDB or {}
         local db = MailItemLogDB
         M.db = db
+        if not M.characterModuleLoaded then
+            M.tabState.characters = nil
+            if DEFAULT_CHAT_FRAME then
+                DEFAULT_CHAT_FRAME:AddMessage("Mail Item Log: My Characters did not load. Close WoW, check that MyCharacters.lua is installed, then restart the client.")
+            end
+        end
         if not M.tabState[db.openingTab] then db.openingTab = "last" end
         if not M.tabState[db.lastTab] then db.lastTab = "sent" end
         db.sent = db.sent or {}
@@ -45,12 +54,19 @@ events:SetScript("OnEvent", function()
         M.installSendHook()
         M.addMinimapIcon()
         M.initializeSharing()
+        if M.characterModuleLoaded then M.initializeCharacters() end
     elseif M.db then
         local rts = M.rts
         if event == "CHAT_MSG_WHISPER" then
             if arg1 then M.receivePacket(arg1, arg2) end
         elseif event == "FRIENDLIST_UPDATE" then
             if M.view == "shared" then M.redraw() end
+        elseif event == "BAG_UPDATE" then
+            if M.characterModuleLoaded then M.characterBagChanged() end
+        elseif event == "PLAYER_REGEN_DISABLED" then
+            M.characterCombat = true
+        elseif event == "PLAYER_REGEN_ENABLED" then
+            M.characterCombat = nil
         elseif event == "MAIL_SHOW" then
             M.mailboxOpen = true
             rts.mailboxOpenedAt = GetTime()
@@ -100,6 +116,7 @@ events:SetScript("OnUpdate", function()
             reportFailure("mailbox scan paused", message)
         end
     end
+    if M.characterModuleLoaded then M.pumpCharacters(GetTime()) end
     if elapsed >= 60 then
         elapsed = 0
         M.prune(time())
